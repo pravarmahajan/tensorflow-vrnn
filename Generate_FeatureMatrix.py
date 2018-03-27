@@ -160,7 +160,7 @@ def generateStatisticalFeatureMatrix(Ls=256, Lf=4):
     print 'elpased time:', time.time()-start
     normalizedStatFeatureMatrix = normalizeStatFeatureMatrix(statisticalFeatureMatrix, minimum=0, maximum=40)
     print 'Normalization is completed!'
-    cPickle.dump(normalizedStatFeatureMatrix, open('trajectoriesStatFeatMatrix_5_5', 'w'))
+    cPickle.dump(normalizedStatFeatureMatrix, open('data/trajectoriesStatFeatMatrix_5_5', 'w'))
     #normalizedStatFeatureMatrix: In this dictionary, we have an array of feature matrices for each trajectory. 
     # Each feature matrix has 35 columns and up to 128 rows. Usually, the last stat feature matrix of a trajectory has less than 128 rows. 
             
