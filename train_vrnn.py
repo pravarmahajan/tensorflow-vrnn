@@ -9,7 +9,8 @@ import os
 import cPickle
 
 from model_vrnn import VRNN
-
+import matplotlib as mpl
+mpl.use("Agg")
 from matplotlib import pyplot as plt
 
 '''
@@ -91,9 +92,9 @@ if __name__ == '__main__':
                         help='minibatch size')
     parser.add_argument('--seq_length', type=int, default=100,
                         help='RNN sequence length')
-    parser.add_argument('--num_epochs', type=int, default=100,
+    parser.add_argument('--num_epochs', type=int, default=200,
                         help='number of epochs')
-    parser.add_argument('--save_every', type=int, default=500,
+    parser.add_argument('--save_every', type=int, default=10,
                         help='save frequency')
     parser.add_argument('--grad_clip', type=float, default=10.,
                         help='clip gradients at this value')

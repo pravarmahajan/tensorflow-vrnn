@@ -18,6 +18,8 @@ class VartiationalRNNCell(tf.contrib.rnn.RNNCell):
     """Variational RNN cell."""
 
     def __init__(self, x_dim, h_dim, z_dim = 100):
+        """For our purposes, we need to ensure that the whole code
+        works when x_dim is a matrix of 35x128"""
         self.n_h = h_dim
         self.n_x = x_dim
         self.n_z = z_dim
@@ -72,12 +74,10 @@ class VartiationalRNNCell(tf.contrib.rnn.RNNCell):
                     dec_mu = linear(dec_hidden, self.n_x)
                 with tf.variable_scope("sigma"):
                     dec_sigma = tf.nn.softplus(linear(dec_hidden, self.n_x))
-                with tf.variable_scope("rho"):
-                    dec_rho = tf.nn.sigmoid(linear(dec_hidden, self.n_x))
 
 
             output, state2 = self.lstm(tf.concat(axis=1,values=(x_1, z_1)), state)
-        return (enc_mu, enc_sigma, dec_mu, dec_sigma, dec_rho, prior_mu, prior_sigma), state2
+        return (enc_mu, enc_sigma, dec_mu, dec_sigma, prior_mu, prior_sigma), state2
 
 
 
@@ -85,19 +85,26 @@ class VartiationalRNNCell(tf.contrib.rnn.RNNCell):
 class VRNN():
     def __init__(self, args, sample=False):
 
-        def tf_normal(y, mu, s, rho):
+        
+        def tf_normal(y, mu, s):
+            """This function returns negative log of pdf of a sample y,
+            assuming Y follows a gaussian dist with mu, s as parameters"""
+            #s = sigma
+            #mu = mean
             with tf.variable_scope('normal'):
-                ss = tf.maximum(1e-10,tf.square(s))
+                #ss = sigma squared
+                ss = tf.maximum(1e-10,tf.square(s)) 
                 norm = tf.subtract(y[:,:args.chunk_samples], mu)
                 z = tf.div(tf.square(norm), ss)
                 denom_log = tf.log(2*np.pi*ss, name='denom_log')
                 result = tf.reduce_sum(z+denom_log, 1)/2# -
-                                       #(tf.log(tf.maximum(1e-20,rho),name='log_rho')*(1+y[:,args.chunk_samples:])
-                                       # +tf.log(tf.maximum(1e-20,1-rho),name='log_rho_inv')*(1-y[:,args.chunk_samples:]))/2, 1)
 
             return result
 
         def tf_kl_gaussgauss(mu_1, sigma_1, mu_2, sigma_2):
+            """returns kl divergence of the two distributions
+                https://stats.stackexchange.com/questions/7440/kl-divergence-between-two-univariate-gaussians
+            """
             with tf.variable_scope("kl_gaussgauss"):
                 return tf.reduce_sum(0.5 * (
                     2 * tf.log(tf.maximum(1e-9,sigma_2),name='log_sigma_2') 
@@ -105,9 +112,10 @@ class VRNN():
                   + (tf.square(sigma_1) + tf.square(mu_1 - mu_2)) / tf.maximum(1e-9,(tf.square(sigma_2))) - 1
                 ), 1)
 
-        def get_lossfunc(enc_mu, enc_sigma, dec_mu, dec_sigma, dec_rho, prior_mu, prior_sigma, y):
+        def get_lossfunc(enc_mu, enc_sigma, dec_mu, dec_sigma, prior_mu, prior_sigma, y):
+            """Obtain total loss: kl_loss + likelihood loss"""
             kl_loss = tf_kl_gaussgauss(enc_mu, enc_sigma, prior_mu, prior_sigma)
-            likelihood_loss = tf_normal(y, dec_mu, dec_sigma, dec_rho)
+            likelihood_loss = tf_normal(y, dec_mu, dec_sigma)
 
             return tf.reduce_mean(kl_loss + likelihood_loss)
             #return tf.reduce_mean(likelihood_loss)
@@ -143,7 +151,7 @@ class VRNN():
         #print outputs
         #outputs = map(tf.pack,zip(*outputs))
         outputs_reshape = []
-        names = ["enc_mu", "enc_sigma", "dec_mu", "dec_sigma", "dec_rho", "prior_mu", "prior_sigma"]
+        names = ["enc_mu", "enc_sigma", "dec_mu", "dec_sigma", "prior_mu", "prior_sigma"]
         for n,name in enumerate(names):
             with tf.variable_scope(name):
                 x = tf.stack([o[n] for o in outputs])
@@ -151,13 +159,12 @@ class VRNN():
                 x = tf.reshape(x,[args.batch_size*args.seq_length, -1])
                 outputs_reshape.append(x)
 
-        enc_mu, enc_sigma, dec_mu, dec_sigma, dec_rho, prior_mu, prior_sigma = outputs_reshape
+        enc_mu, enc_sigma, dec_mu, dec_sigma, prior_mu, prior_sigma = outputs_reshape
         self.final_state_c,self.final_state_h = last_state
         self.mu = dec_mu
         self.sigma = dec_sigma
-        self.rho = dec_rho
 
-        lossfunc = get_lossfunc(enc_mu, enc_sigma, dec_mu, dec_sigma, dec_rho, prior_mu, prior_sigma, flat_target_data)
+        lossfunc = get_lossfunc(enc_mu, enc_sigma, dec_mu, dec_sigma, prior_mu, prior_sigma, flat_target_data)
         self.sigma = dec_sigma
         self.mu = dec_mu
         with tf.variable_scope('cost'):
@@ -197,8 +204,8 @@ class VRNN():
                         self.initial_state_c:prev_state[0],
                         self.initial_state_h:prev_state[1]}
                 
-                [o_mu, o_sigma, o_rho, prev_state_c, prev_state_h] = sess.run(
-                        [self.mu, self.sigma, self.rho,
+                [o_mu, o_sigma, prev_state_c, prev_state_h] = sess.run(
+                        [self.mu, self.sigma,
                          self.final_state_c,self.final_state_h],feed)
 
             prev_x = start[-1,:]
@@ -213,11 +220,10 @@ class VRNN():
             feed = {self.input_data: prev_x,
                     self.initial_state_c:prev_state[0],
                     self.initial_state_h:prev_state[1]}
-            [o_mu, o_sigma, o_rho, next_state_c, next_state_h] = sess.run([self.mu, self.sigma,
-                self.rho, self.final_state_c, self.final_state_h],feed)
+            [o_mu, o_sigma, next_state_c, next_state_h] = sess.run([self.mu, self.sigma,
+                self.final_state_c, self.final_state_h],feed)
 
-            next_x = np.hstack((sample_gaussian(o_mu, o_sigma),
-                                2.*(o_rho > np.random.random(o_rho.shape[:2]))-1.))
+            next_x = np.hstack(sample_gaussian(o_mu, o_sigma))
             chunks[i] = next_x
             mus[i] = o_mu
             sigmas[i] = o_sigma
