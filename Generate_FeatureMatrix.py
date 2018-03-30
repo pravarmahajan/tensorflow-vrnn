@@ -62,7 +62,8 @@ def returnAngularDisplacement(fLat, fLon, sLat, sLon):
 def generateStatisticalFeatureMatrix(Ls=256, Lf=4):
     #load trajectories
     trajectories = {}
-    with open('Samples/smallSample_5_5.csv', 'r') as f:
+    filename = 'smallSample_5_5.csv'
+    with open('Samples/'+filename, 'r') as f:
         lines = f.readlines()
         ct = ""
         tj = []
@@ -118,7 +119,6 @@ def generateStatisticalFeatureMatrix(Ls=256, Lf=4):
     #Generate Statistical Feature Matrix
     start = time.time()
     statisticalFeatureMatrix = {}
-    import ipdb; ipdb.set_trace()
     for t in basicFeatures:
         print 'processing', t      
         matricesForTrajectory = []
@@ -160,7 +160,7 @@ def generateStatisticalFeatureMatrix(Ls=256, Lf=4):
     print 'elpased time:', time.time()-start
     normalizedStatFeatureMatrix = normalizeStatFeatureMatrix(statisticalFeatureMatrix, minimum=0, maximum=40)
     print 'Normalization is completed!'
-    cPickle.dump(normalizedStatFeatureMatrix, open('data/trajectoriesStatFeatMatrix_5_5', 'w'))
+    cPickle.dump(normalizedStatFeatureMatrix, open('data/'+filename.replace('.csv', ''), 'wb'))
     #normalizedStatFeatureMatrix: In this dictionary, we have an array of feature matrices for each trajectory. 
     # Each feature matrix has 35 columns and up to 128 rows. Usually, the last stat feature matrix of a trajectory has less than 128 rows. 
             

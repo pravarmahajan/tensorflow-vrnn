@@ -7,9 +7,14 @@ import numpy as np
 import matplotlib as mpl
 mpl.use("Agg")
 import matplotlib.pyplot as plt
+import seaborn
+from train_vrnn import load_data
 
-from train_vrnn import next_batch
-num = 100
+def plot_sample(sample, name):
+    plt.clf()
+    plt.imshow(sample.T, cmap='hot', interpolation='nearest')
+    plt.savefig('{}.png'.format(name))
+
 with open(os.path.join('save-vrnn', 'config.pkl')) as f:
     saved_args = cPickle.load(f)
 
@@ -21,11 +26,13 @@ ckpt = tf.train.get_checkpoint_state('save-vrnn')
 print "loading model: ",ckpt.model_checkpoint_path
 
 saver.restore(sess, ckpt.model_checkpoint_path)
-sample_data,mus,sigmas = model.sample(sess,saved_args, num=num)
+sample_data,mus,sigmas = model.sample(sess,saved_args)
+import ipdb; ipdb.set_trace()
+plot_sample(sample_data, 'sample')
+print(sample_data)
 
-#plt.scatter(range(num), sample_data[:, 0], c='b', s=1)
-#plt.scatter(range(num), sample_data[:, 1], c='g', s=1)
-fig, axes = plt.subplots(figsize = (50, 10))
-axes.plot(range(num), sample_data[:, 0], c='b')
-#plt.plot(range(num), sample_data[:, 1], c='g')
-plt.savefig('test.png')
+train, val = load_data(saved_args)
+for i in range(5):
+    random_data = train[np.random.randint(0, train.shape[0])]
+    plot_sample(random_data, 'random_{}'.format(i))
+    print(random_data)
