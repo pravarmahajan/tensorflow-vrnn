@@ -94,7 +94,7 @@ if __name__ == '__main__':
                         help='RNN sequence length')
     parser.add_argument('--num_epochs', type=int, default=200,
                         help='number of epochs')
-    parser.add_argument('--save_every', type=int, default=10,
+    parser.add_argument('--save_every', type=int, default=500,
                         help='save frequency')
     parser.add_argument('--grad_clip', type=float, default=10.,
                         help='clip gradients at this value')

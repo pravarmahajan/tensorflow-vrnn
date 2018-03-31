@@ -123,7 +123,7 @@ class VRNN():
         self.args = args
         if sample:
             args.batch_size = 1
-            args.seq_length = 1
+            #args.seq_length = 1
 
         cell = VartiationalRNNCell(args.chunk_samples, args.rnn_size, args.latent_size)
 
@@ -187,49 +187,89 @@ class VRNN():
         self.train_op = optimizer.apply_gradients(zip(grads, tvars))
         #self.saver = tf.train.Saver(tf.all_variables())
 
-    def sample(self, sess, args, num=4410, start=None):
+    #def sample(self, sess, args, num=4410, start=None):
+
+    #    def sample_gaussian(mu, sigma):
+    #        return mu + (sigma*np.random.randn(*sigma.shape))
+
+    #    if start is None:
+    #        prev_x = np.random.randn(1, 1, 2*args.chunk_samples)
+    #    elif len(start.shape) == 1:
+    #        prev_x = start[np.newaxis,np.newaxis,:]
+    #    elif len(start.shape) == 2:
+    #        for i in range(start.shape[0]-1):
+    #            prev_x = start[i,:]
+    #            prev_x = prev_x[np.newaxis,np.newaxis,:]
+    #            feed = {self.input_data: prev_x,
+    #                    self.initial_state_c:prev_state[0],
+    #                    self.initial_state_h:prev_state[1]}
+    #            
+    #            [o_mu, o_sigma, prev_state_c, prev_state_h] = sess.run(
+    #                    [self.mu, self.sigma,
+    #                     self.final_state_c,self.final_state_h],feed)
+
+    #        prev_x = start[-1,:]
+    #        prev_x = prev_x[np.newaxis,np.newaxis,:]
+
+    #    prev_state = sess.run(self.cell.zero_state(1, tf.float32))
+    #    chunks = np.zeros((num, 2*args.chunk_samples), dtype=np.float32)
+    #    mus = np.zeros((num, args.chunk_samples), dtype=np.float32)
+    #    sigmas = np.zeros((num, args.chunk_samples), dtype=np.float32)
+
+    #    for i in xrange(num):
+    #        feed = {self.input_data: prev_x,
+    #                self.initial_state_c:prev_state[0],
+    #                self.initial_state_h:prev_state[1]}
+    #        [o_mu, o_sigma, next_state_c, next_state_h] = sess.run([self.mu, self.sigma,
+    #            self.final_state_c, self.final_state_h],feed)
+
+    #        next_x = np.hstack(sample_gaussian(o_mu, o_sigma))
+    #        chunks[i] = next_x
+    #        mus[i] = o_mu
+    #        sigmas[i] = o_sigma
+
+    #        prev_x = np.zeros((1, 1, 2*args.chunk_samples), dtype=np.float32)
+    #        prev_x[0][0] = next_x
+    #        prev_state = next_state_c, next_state_h
+
+    #    return chunks, mus, sigmas
+    def sample(self, sess, args,start=None):
 
         def sample_gaussian(mu, sigma):
             return mu + (sigma*np.random.randn(*sigma.shape))
 
-        if start is None:
-            prev_x = np.random.randn(1, 1, 2*args.chunk_samples)
-        elif len(start.shape) == 1:
-            prev_x = start[np.newaxis,np.newaxis,:]
-        elif len(start.shape) == 2:
-            for i in range(start.shape[0]-1):
-                prev_x = start[i,:]
-                prev_x = prev_x[np.newaxis,np.newaxis,:]
-                feed = {self.input_data: prev_x,
-                        self.initial_state_c:prev_state[0],
-                        self.initial_state_h:prev_state[1]}
-                
-                [o_mu, o_sigma, prev_state_c, prev_state_h] = sess.run(
-                        [self.mu, self.sigma,
-                         self.final_state_c,self.final_state_h],feed)
+        prev_x = np.random.randn(1, args.seq_length, 2*args.chunk_samples)
+        #if start is None:
+        #    prev_x = np.random.randn(1, args.seq_length, 2*args.chunk_samples)
+        #elif len(start.shape) == 1:
+        #    prev_x = start[np.newaxis,np.newaxis,:]
+        #elif len(start.shape) == 2:
+        #    for i in range(start.shape[0]-1):
+        #        prev_x = start[i,:]
+        #        prev_x = prev_x[np.newaxis,np.newaxis,:]
+        #        feed = {self.input_data: prev_x,
+        #                self.initial_state_c:prev_state[0],
+        #                self.initial_state_h:prev_state[1]}
+        #        
+        #        [o_mu, o_sigma, prev_state_c, prev_state_h] = sess.run(
+        #                [self.mu, self.sigma,
+        #                 self.final_state_c,self.final_state_h],feed)
 
-            prev_x = start[-1,:]
-            prev_x = prev_x[np.newaxis,np.newaxis,:]
+        #    prev_x = start[-1,:]
+        #    prev_x = prev_x[np.newaxis,np.newaxis,:]
 
-        prev_state = sess.run(self.cell.zero_state(1, tf.float32))
-        chunks = np.zeros((num, 2*args.chunk_samples), dtype=np.float32)
-        mus = np.zeros((num, args.chunk_samples), dtype=np.float32)
-        sigmas = np.zeros((num, args.chunk_samples), dtype=np.float32)
+        #prev_state = sess.run(self.cell.zero_state(1, tf.float32))
+        #chunks = np.zeros((args.seq_length, 2*args.chunk_samples), dtype=np.float32)
+        #mus = np.zeros((args.seq_length, 2*args.chunk_samples), dtype=np.float32)
+        #sigmas = np.zeros((args.seq_length, 2*args.chunk_samples), dtype=np.float32)
 
-        for i in xrange(num):
-            feed = {self.input_data: prev_x,
-                    self.initial_state_c:prev_state[0],
-                    self.initial_state_h:prev_state[1]}
-            [o_mu, o_sigma, next_state_c, next_state_h] = sess.run([self.mu, self.sigma,
-                self.final_state_c, self.final_state_h],feed)
+        [o_mu, o_sigma] = sess.run([self.mu, self.sigma],{self.input_data: prev_x})
+        #import ipdb; ipdb.set_trace()
+        sample_x = sample_gaussian(o_mu, o_sigma)
+        return prev_x, sample_x, o_mu, o_sigma
 
-            next_x = np.hstack(sample_gaussian(o_mu, o_sigma))
-            chunks[i] = next_x
-            mus[i] = o_mu
-            sigmas[i] = o_sigma
+    def sample2(self, sess, args, start=None):
+        def sample_gaussian(mu, sigma):
+            return mu + (sigma*np.random.randn(*sigma.shape))
+        self.cell
 
-            prev_x = np.zeros((1, 1, 2*args.chunk_samples), dtype=np.float32)
-            prev_x[0][0] = next_x
-            prev_state = next_state_c, next_state_h
-
-        return chunks, mus, sigmas
