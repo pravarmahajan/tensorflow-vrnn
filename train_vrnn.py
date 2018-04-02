@@ -26,10 +26,6 @@ def next_batch(args):
     t0 = np.random.randn(args.batch_size, 1, (2 * args.chunk_samples))
     mixed_noise = np.random.randn(
         args.batch_size, args.seq_length, (2 * args.chunk_samples)) * 0.1
-    #x = t0 + mixed_noise + np.random.randn(
-    #    args.batch_size, args.seq_length, (2 * args.chunk_samples)) * 0.1
-    #y = t0 + mixed_noise + np.random.randn(
-    #    args.batch_size, args.seq_length, (2 * args.chunk_samples)) * 0.1
     x = np.sin(2 * np.pi * (np.arange(args.seq_length)[np.newaxis, :, np.newaxis] / 10. + t0)) + np.random.randn(
         args.batch_size, args.seq_length, (2 * args.chunk_samples)) * 0.1 + mixed_noise*0.1
     y = np.sin(2 * np.pi * (np.arange(1, args.seq_length + 1)[np.newaxis, :, np.newaxis] / 10. + t0)) + np.random.randn(
@@ -56,6 +52,7 @@ def train(args, model):
         merged = tf.summary.merge_all()
         tf.global_variables_initializer().run()
         saver = tf.train.Saver(tf.global_variables())
+        latent_data = np.random.randn(args.batch_size, args.latent_size)
         if ckpt:
             saver.restore(sess, ckpt.model_checkpoint_path)
             print "Loaded model"
@@ -65,7 +62,7 @@ def train(args, model):
             state = model.initial_state_c, model.initial_state_h
             for b in xrange(n_batches):
                 x, y = next_batch(args)
-                feed = {model.input_data: x, model.target_data: y}
+                feed = {model.input_data: x, model.target_data: y, model.latents: latent_data}
                 train_loss, _, cr, summary, sigma, mu, input, target= sess.run(
                         [model.cost, model.train_op, check, merged, model.sigma, model.mu, model.flat_input, model.target],
                                                              feed)

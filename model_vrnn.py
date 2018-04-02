@@ -17,7 +17,7 @@ def linear(input_, output_size, scope=None, stddev=0.02, bias_start=0.0, with_w=
 class VartiationalRNNCell(tf.contrib.rnn.RNNCell):
     """Variational RNN cell."""
 
-    def __init__(self, x_dim, h_dim, z_dim = 100):
+    def __init__(self, x_dim, h_dim, is_train, latents, z_dim = 100):
         """For our purposes, we need to ensure that the whole code
         works when x_dim is a matrix of 35x128"""
         self.n_h = h_dim
@@ -29,6 +29,8 @@ class VartiationalRNNCell(tf.contrib.rnn.RNNCell):
         self.n_dec_hidden = x_dim
         self.n_prior_hidden = z_dim
         self.lstm = tf.contrib.rnn.LSTMCell(self.n_h, state_is_tuple=True)
+        self.is_train = is_train
+        self.latents = latents
 
 
     @property
@@ -62,8 +64,7 @@ class VartiationalRNNCell(tf.contrib.rnn.RNNCell):
                 with tf.variable_scope("sigma"):
                     enc_sigma = tf.nn.softplus(linear(enc_hidden, self.n_z))
             eps = tf.random_normal((x.get_shape().as_list()[0], self.n_z), 0.0, 1.0, dtype=tf.float32)
-            # z = mu + sigma*epsilon
-            z = tf.add(enc_mu, tf.multiply(enc_sigma, eps))
+            z = tf.cond(tf.constant(self.is_train), lambda: tf.add(enc_mu, tf.multiply(enc_sigma, eps)), lambda: self.latents)
             with tf.variable_scope("phi_z"):
                 z_1 = tf.nn.relu(linear(z, self.n_z_1))
 
@@ -118,19 +119,23 @@ class VRNN():
             likelihood_loss = tf_normal(y, dec_mu, dec_sigma)
 
             return tf.reduce_mean(kl_loss + likelihood_loss)
-            #return tf.reduce_mean(likelihood_loss)
 
         self.args = args
+        self.is_train = True
+
         if sample:
             args.batch_size = 1
-            #args.seq_length = 1
+            self.is_train = False
+            args.seq_length = 1
 
-        cell = VartiationalRNNCell(args.chunk_samples, args.rnn_size, args.latent_size)
-
-        self.cell = cell
 
         self.input_data = tf.placeholder(dtype=tf.float32, shape=[args.batch_size, args.seq_length, 2*args.chunk_samples], name='input_data')
+        self.latents = tf.placeholder(dtype=tf.float32, shape=[args.batch_size, args.latent_size], name='latent_data')
         self.target_data = tf.placeholder(dtype=tf.float32, shape=[args.batch_size, args.seq_length, 2*args.chunk_samples],name = 'target_data')
+
+        cell = VartiationalRNNCell(args.chunk_samples, args.rnn_size, self.is_train, self.latents, args.latent_size)
+        self.cell = cell
+
         self.initial_state_c, self.initial_state_h = cell.zero_state(batch_size=args.batch_size, dtype=tf.float32)
 
 
@@ -163,6 +168,8 @@ class VRNN():
         self.final_state_c,self.final_state_h = last_state
         self.mu = dec_mu
         self.sigma = dec_sigma
+        self.prior_mu = prior_mu
+        self.prior_sigma = prior_sigma
 
         lossfunc = get_lossfunc(enc_mu, enc_sigma, dec_mu, dec_sigma, prior_mu, prior_sigma, flat_target_data)
         self.sigma = dec_sigma
@@ -179,97 +186,106 @@ class VRNN():
         for t in tvars:
             print t.name
         grads = tf.gradients(self.cost, tvars)
-        #grads = tf.cond(
-        #    tf.global_norm(grads) > 1e-20,
-        #    lambda: tf.clip_by_global_norm(grads, args.grad_clip)[0],
-        #    lambda: grads)
         optimizer = tf.train.AdamOptimizer(self.lr)
         self.train_op = optimizer.apply_gradients(zip(grads, tvars))
-        #self.saver = tf.train.Saver(tf.all_variables())
 
-    #def sample(self, sess, args, num=4410, start=None):
+    def sample(self, sess, args, num=4410, start=None):
+
+        def sample_gaussian(mu, sigma):
+            return mu + (sigma*np.random.randn(*sigma.shape))
+
+        if start is None:
+            prev_x = np.random.randn(1, 1, 2*args.chunk_samples)
+        elif len(start.shape) == 1:
+            prev_x = start[np.newaxis,np.newaxis,:]
+        elif len(start.shape) == 2:
+            for i in range(start.shape[0]-1):
+                prev_x = start[i,:]
+                prev_x = prev_x[np.newaxis,np.newaxis,:]
+                feed = {self.input_data: prev_x,
+                        self.initial_state_c:prev_state[0],
+                        self.initial_state_h:prev_state[1]}
+                
+                [o_mu, o_sigma, prev_state_c, prev_state_h] = sess.run(
+                        [self.mu, self.sigma,
+                         self.final_state_c,self.final_state_h],feed)
+
+            prev_x = start[-1,:]
+            prev_x = prev_x[np.newaxis,np.newaxis,:]
+
+        prev_state = sess.run(self.cell.zero_state(1, tf.float32))
+        chunks = np.zeros((num, 2*args.chunk_samples), dtype=np.float32)
+        mus = np.zeros((num, args.chunk_samples), dtype=np.float32)
+        sigmas = np.zeros((num, args.chunk_samples), dtype=np.float32)
+
+        for i in xrange(num):
+            feed = {self.input_data: prev_x,
+                    self.initial_state_c:prev_state[0],
+                    self.initial_state_h:prev_state[1]}
+            [o_mu, o_sigma, next_state_c, next_state_h] = sess.run([self.mu, self.sigma,
+                self.final_state_c, self.final_state_h],feed)
+
+            next_x = np.hstack(sample_gaussian(o_mu, o_sigma))
+            chunks[i] = next_x
+            mus[i] = o_mu
+            sigmas[i] = o_sigma
+
+            prev_x = np.zeros((1, 1, 2*args.chunk_samples), dtype=np.float32)
+            prev_x[0][0] = next_x
+            prev_state = next_state_c, next_state_h
+
+        return chunks, mus, sigmas
+
+    #def sample(self, sess, args,start=None):
 
     #    def sample_gaussian(mu, sigma):
     #        return mu + (sigma*np.random.randn(*sigma.shape))
 
-    #    if start is None:
-    #        prev_x = np.random.randn(1, 1, 2*args.chunk_samples)
-    #    elif len(start.shape) == 1:
-    #        prev_x = start[np.newaxis,np.newaxis,:]
-    #    elif len(start.shape) == 2:
-    #        for i in range(start.shape[0]-1):
-    #            prev_x = start[i,:]
-    #            prev_x = prev_x[np.newaxis,np.newaxis,:]
-    #            feed = {self.input_data: prev_x,
-    #                    self.initial_state_c:prev_state[0],
-    #                    self.initial_state_h:prev_state[1]}
-    #            
-    #            [o_mu, o_sigma, prev_state_c, prev_state_h] = sess.run(
-    #                    [self.mu, self.sigma,
-    #                     self.final_state_c,self.final_state_h],feed)
+    #    prev_x = np.random.randn(1, args.seq_length, 2*args.chunk_samples)
+    #    #if start is None:
+    #    #    prev_x = np.random.randn(1, args.seq_length, 2*args.chunk_samples)
+    #    #elif len(start.shape) == 1:
+    #    #    prev_x = start[np.newaxis,np.newaxis,:]
+    #    #elif len(start.shape) == 2:
+    #    #    for i in range(start.shape[0]-1):
+    #    #        prev_x = start[i,:]
+    #    #        prev_x = prev_x[np.newaxis,np.newaxis,:]
+    #    #        feed = {self.input_data: prev_x,
+    #    #                self.initial_state_c:prev_state[0],
+    #    #                self.initial_state_h:prev_state[1]}
+    #    #        
+    #    #        [o_mu, o_sigma, prev_state_c, prev_state_h] = sess.run(
+    #    #                [self.mu, self.sigma,
+    #    #                 self.final_state_c,self.final_state_h],feed)
 
-    #        prev_x = start[-1,:]
-    #        prev_x = prev_x[np.newaxis,np.newaxis,:]
+    #    #    prev_x = start[-1,:]
+    #    #    prev_x = prev_x[np.newaxis,np.newaxis,:]
 
+    #    #prev_state = sess.run(self.cell.zero_state(1, tf.float32))
+    #    #chunks = np.zeros((args.seq_length, 2*args.chunk_samples), dtype=np.float32)
+    #    #mus = np.zeros((args.seq_length, 2*args.chunk_samples), dtype=np.float32)
+    #    #sigmas = np.zeros((args.seq_length, 2*args.chunk_samples), dtype=np.float32)
+
+    #    [o_mu, o_sigma] = sess.run([self.mu, self.sigma],{self.input_data: prev_x})
+    #    #import ipdb; ipdb.set_trace()
+    #    sample_x = sample_gaussian(o_mu, o_sigma)
+    #    return prev_x, sample_x, o_mu, o_sigma
+
+    #def sample2(self, sess, args, start=None):
+    #    def sample_gaussian(mu, sigma):
+    #        return mu + (sigma*np.random.randn(*sigma.shape))
+
+    #    prev_x = np.random.randn(1, args.seq_length, 2*args.chunk_samples)
     #    prev_state = sess.run(self.cell.zero_state(1, tf.float32))
-    #    chunks = np.zeros((num, 2*args.chunk_samples), dtype=np.float32)
-    #    mus = np.zeros((num, args.chunk_samples), dtype=np.float32)
-    #    sigmas = np.zeros((num, args.chunk_samples), dtype=np.float32)
 
-    #    for i in xrange(num):
-    #        feed = {self.input_data: prev_x,
-    #                self.initial_state_c:prev_state[0],
-    #                self.initial_state_h:prev_state[1]}
-    #        [o_mu, o_sigma, next_state_c, next_state_h] = sess.run([self.mu, self.sigma,
-    #            self.final_state_c, self.final_state_h],feed)
 
-    #        next_x = np.hstack(sample_gaussian(o_mu, o_sigma))
-    #        chunks[i] = next_x
-    #        mus[i] = o_mu
-    #        sigmas[i] = o_sigma
+    #    latents = np.random.randn(1, args.latent_size)
+    #    prior_mu, prior_sigma = sess.run([self.prior_mu, self.prior_sigma], {self.input_data: prev_x, self.initial_state_c: prev_state[0], self.initial_state_h: prev_state[1], self.latents: latents})
 
-    #        prev_x = np.zeros((1, 1, 2*args.chunk_samples), dtype=np.float32)
-    #        prev_x[0][0] = next_x
-    #        prev_state = next_state_c, next_state_h
 
-    #    return chunks, mus, sigmas
-    def sample(self, sess, args,start=None):
-
-        def sample_gaussian(mu, sigma):
-            return mu + (sigma*np.random.randn(*sigma.shape))
-
-        prev_x = np.random.randn(1, args.seq_length, 2*args.chunk_samples)
-        #if start is None:
-        #    prev_x = np.random.randn(1, args.seq_length, 2*args.chunk_samples)
-        #elif len(start.shape) == 1:
-        #    prev_x = start[np.newaxis,np.newaxis,:]
-        #elif len(start.shape) == 2:
-        #    for i in range(start.shape[0]-1):
-        #        prev_x = start[i,:]
-        #        prev_x = prev_x[np.newaxis,np.newaxis,:]
-        #        feed = {self.input_data: prev_x,
-        #                self.initial_state_c:prev_state[0],
-        #                self.initial_state_h:prev_state[1]}
-        #        
-        #        [o_mu, o_sigma, prev_state_c, prev_state_h] = sess.run(
-        #                [self.mu, self.sigma,
-        #                 self.final_state_c,self.final_state_h],feed)
-
-        #    prev_x = start[-1,:]
-        #    prev_x = prev_x[np.newaxis,np.newaxis,:]
-
-        #prev_state = sess.run(self.cell.zero_state(1, tf.float32))
-        #chunks = np.zeros((args.seq_length, 2*args.chunk_samples), dtype=np.float32)
-        #mus = np.zeros((args.seq_length, 2*args.chunk_samples), dtype=np.float32)
-        #sigmas = np.zeros((args.seq_length, 2*args.chunk_samples), dtype=np.float32)
-
-        [o_mu, o_sigma] = sess.run([self.mu, self.sigma],{self.input_data: prev_x})
-        #import ipdb; ipdb.set_trace()
-        sample_x = sample_gaussian(o_mu, o_sigma)
-        return prev_x, sample_x, o_mu, o_sigma
-
-    def sample2(self, sess, args, start=None):
-        def sample_gaussian(mu, sigma):
-            return mu + (sigma*np.random.randn(*sigma.shape))
-        self.cell
-
+    #    import ipdb; ipdb.set_trace()
+    #    latents = sample_gaussian(prior_mu, prior_sigma)
+    #    o_mu, o_sigma = sess.run([self.mu, self.sigma], {self.input_data: prev_x, self.latents: latents})
+    #    sample_x = sample_gaussian(o_mu, o_sigma)
+    #    
+    #    return sample_x
