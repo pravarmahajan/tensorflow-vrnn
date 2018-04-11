@@ -124,7 +124,7 @@ class VRNN():
         self.args = args
         if sample:
             args.batch_size = 1
-            #args.seq_length = 1
+            args.seq_length = 1
 
         cell = VartiationalRNNCell(args.num_features, args.rnn_size, args.latent_size)
 
@@ -132,7 +132,7 @@ class VRNN():
 
         self.input_data = tf.placeholder(dtype=tf.float32, shape=[None, args.seq_length, args.num_features], name='input_data')
         self.target_data = tf.placeholder(dtype=tf.float32, shape=[None, args.seq_length, args.num_features],name = 'target_data')
-        #self.initial_state_c, self.initial_state_h = cell.zero_state(batch_size=None, dtype=tf.float32)
+        self.initial_state_c, self.initial_state_h = cell.zero_state(batch_size=args.batch_size, dtype=tf.float32)
 
 
         # input shape: (batch_size, n_steps, n_input)
@@ -189,13 +189,13 @@ class VRNN():
         self.train_op = optimizer.apply_gradients(zip(grads, tvars))
         #self.saver = tf.train.Saver(tf.all_variables())
 
-    def sample(self, sess, args,start=None):
+    def sample(self, sess, args,num=128,start=None):
 
         def sample_gaussian(mu, sigma):
             return mu + (sigma*np.random.randn(*sigma.shape))
-
         if start is None:
-            prev_x = np.random.randn(1, args.seq_length, args.num_features)
+            #prev_x = np.random.randn(1, args.seq_length, args.num_features)
+            prev_x = np.zeros((1, args.seq_length, args.num_features))
         elif len(start.shape) == 1:
             prev_x = start[np.newaxis,np.newaxis,:]
         elif len(start.shape) == 2:
@@ -214,27 +214,24 @@ class VRNN():
             prev_x = prev_x[np.newaxis,np.newaxis,:]
 
         prev_state = sess.run(self.cell.zero_state(1, tf.float32))
-        chunks = np.zeros((args.seq_length, args.num_features), dtype=np.float32)
-        mus = np.zeros((args.seq_length, args.num_features), dtype=np.float32)
-        sigmas = np.zeros((args.seq_length, args.num_features), dtype=np.float32)
+        chunks = np.zeros((num, args.num_features), dtype=np.float32)
+        mus = np.zeros((num, args.num_features), dtype=np.float32)
+        sigmas = np.zeros((num, args.num_features), dtype=np.float32)
 
-        [o_mu, o_sigma] = sess.run([self.mu, self.sigma],{self.input_data: prev_x})
-        sample_x = sample_gaussian(o_mu, o_sigma)
-        return sample_x, o_mu, o_sigma
-        #for i in xrange(num):
-        #    feed = {self.input_data: prev_x,
-        #            self.initial_state_c:prev_state[0],
-        #            self.initial_state_h:prev_state[1]}
-        #    [o_mu, o_sigma, next_state_c, next_state_h] = sess.run([self.mu, self.sigma,
-        #        self.final_state_c, self.final_state_h],feed)
+        for i in xrange(num):
+            feed = {self.input_data: prev_x,
+                    self.initial_state_c:prev_state[0],
+                    self.initial_state_h:prev_state[1]}
+            [o_mu, o_sigma, next_state_c, next_state_h] = sess.run([self.mu, self.sigma,
+                self.final_state_c, self.final_state_h],feed)
 
-        #    next_x = np.hstack(sample_gaussian(o_mu, o_sigma))
-        #    chunks[i] = next_x
-        #    mus[i] = o_mu
-        #    sigmas[i] = o_sigma
+            next_x = np.clip(sample_gaussian(o_mu, o_sigma), 0, 1)
+            chunks[i] = next_x
+            mus[i] = o_mu
+            sigmas[i] = o_sigma
 
-        #    prev_x = np.zeros((1, 1, args.num_features), dtype=np.float32)
-        #    prev_x[0][0] = next_x
-        #    prev_state = next_state_c, next_state_h
+            prev_x = np.empty((1, 1, args.num_features), dtype=np.float32)
+            prev_x[0][0] = next_x
+            prev_state = next_state_c, next_state_h
 
-        #return chunks, mus, sigmas
+        return chunks, mus, sigmas

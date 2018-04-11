@@ -8,6 +8,16 @@ import numpy as np
 import math
 from scipy import stats
 import time
+import progressbar
+import argparse
+
+#shape = (50, 200)
+#shape = (5, 5)
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--shape', type=int, nargs='+', default=[5, 5])
+args = parser.parse_args()
+shape = args.shape
 
 class point:
     lat = 0
@@ -62,29 +72,31 @@ def returnAngularDisplacement(fLat, fLon, sLat, sLon):
 def generateStatisticalFeatureMatrix(Ls=256, Lf=4):
     #load trajectories
     trajectories = {}
-    filename = 'smallSample_5_5.csv'
+    filename = 'smallSample_{}_{}.csv'.format(shape[0], shape[1])
     with open('Samples/'+filename, 'r') as f:
         lines = f.readlines()
         ct = ""
         tj = []
-        for ln in lines:
+        bar = progressbar.ProgressBar()
+        for ln in bar(lines):
             pts = ln.replace('\r\n','').split(',')
             if pts[1] != ct:
                 if ct == "" and pts[0]=="Driver":
                     continue
                 if len(tj) >0:
-                    trajectories[ct] = tj
+                    trajectories[pts[0]+"|"+ct] = tj
                 tj = []
                 tj.append(point(int(pts[2]), float(pts[3]), float(pts[4])))                
                 ct = pts[1]
             else:
                 tj.append(point(int(pts[2]), float(pts[3]), float(pts[4]))) 
-        trajectories[ct] = tj
+        trajectories[pts[0]+"|"+ct] = tj
 #     cPickle.dump(trajectories, open('trajectories', 'w'))
     print('Raw Trajectory Data is loaded! |Trajectories|:' + str(len(trajectories)))
     #Generate Basic Features for each trajectory
     basicFeatures = {}
-    for t in trajectories:
+    bar = progressbar.ProgressBar()
+    for t in bar(trajectories):
         points = trajectories[t]
         traj = []
         lastSpeedNorm = lastAccelNorm = -1
@@ -113,24 +125,28 @@ def generateStatisticalFeatureMatrix(Ls=256, Lf=4):
             
             traj.append([speedNorm, diffSpeedNorm, accelNorm, diffAccelNorm, angularSpeed])        
         basicFeatures[t] = traj
-        
+
+    del trajectories
     print('Basic Features are created!')
-    
     #Generate Statistical Feature Matrix
+    bar = progressbar.ProgressBar()
     start = time.time()
     statisticalFeatureMatrix = {}
-    for t in basicFeatures:
-        print 'processing', t      
+    for t in bar(basicFeatures):
+        #print 'processing', t      
         matricesForTrajectory = []
         traj= basicFeatures[t]
         ranges = returnSegmentIndexes(Ls, len(traj))        
         for p in ranges:
-            matrixForSegment = []
+            if p[1] - p[0] < 256:
+                continue
+            matrixForSegment = np.empty((129, 35))
+            matrixForSegment[0, :] = np.zeros((35,))
             st = p[0]
-            while st < p[1]:
+            for timestep in range(1, 129):
                 en = min(st+Lf, p[1])
-                column = []     
-                for fIdx in range(5):
+                column = []
+                for fIdx in range(0, 5):
                     arr = []
                     mean = 0.0
                     for i in range(st, en):            
@@ -151,19 +167,27 @@ def generateStatisticalFeatureMatrix(Ls=256, Lf=4):
                     for a in arr:
                         std += (a-mean)**2
                     column.append(math.sqrt(std)) #standard deviation
-                matrixForSegment.append(column)
+                matrixForSegment[timestep, :] = list(column)
                 st += Lf/2            
             matricesForTrajectory.append(matrixForSegment)
               
-        statisticalFeatureMatrix[t] = matricesForTrajectory
+        statisticalFeatureMatrix[t] = normalizeStatFeatureMatrix(np.array(matricesForTrajectory))
     
-    print 'elpased time:', time.time()-start
-    normalizedStatFeatureMatrix = normalizeStatFeatureMatrix(statisticalFeatureMatrix, minimum=0, maximum=40)
-    print 'Normalization is completed!'
-    cPickle.dump(normalizedStatFeatureMatrix, open('data/'+filename.replace('.csv', ''), 'wb'))
-    #normalizedStatFeatureMatrix: In this dictionary, we have an array of feature matrices for each trajectory. 
-    # Each feature matrix has 35 columns and up to 128 rows. Usually, the last stat feature matrix of a trajectory has less than 128 rows. 
-            
+    del basicFeatures
+    print("statistical features created")
+    keys = [k.split("|") for k, v in statisticalFeatureMatrix.items() for i in range(v.shape[0])]
+    cPickle.dump(keys, open("data/smallSample_{}_{}_keys.pkl".format(shape[0], shape[1]), "wb"))
+    del keys
+    np.save('data/smallSample_{}_{}.npy'.format(shape[0], shape[1]), np.vstack(statisticalFeatureMatrix.values()), allow_pickle=False)
+    #store = pd.HDFStore('data/smallSample_50_200.h5')
+    #store['data'] = convert_to_dataframe(statisticalFeatureMatrix)
+    #store.close()
+    #print("Data Saved")
+
+#def convert_to_dataframe(data):
+#    df_len = sum([v.shape[0] for statisticalFeatureMatrix.values()])
+#    pd.DataFrame(df_
+
 def returnSegmentIndexes(Ls, leng):
     ranges = []
     start = 0
@@ -176,35 +200,11 @@ def returnSegmentIndexes(Ls, leng):
     return ranges
 
 def normalizeStatFeatureMatrix(statisticalFeatureMatrix, minimum=0, maximum=40):
-    normalizedStatFeatureMatrix = {}
-    
-    for t in statisticalFeatureMatrix:
-        matricesForTrajectory = statisticalFeatureMatrix[t]
-        mins = np.ones(35)*10000
-        maxs = np.ones(35)*-10000        
-        for m in matricesForTrajectory:
-            n = np.asarray(m)            
-            for i in range(35):
-                mins[i] = min(mins[i], min(n[:,i]))
-                maxs[i] = max(maxs[i], max(n[:,i]))
-        normalizedMatrices = []
-        for m in matricesForTrajectory:
-            _m = []
-            for i in range(len(m)):
-                row = []
-                for j in range(35):     
-                    if mins[j] == maxs[j] == 0:
-                        row.append(0.0)
-                    elif mins[j] == maxs[j]:
-                        row.append(maximum)
-                    else:
-                        val = (m[i][j]-mins[j])/(maxs[j] - mins[j])                                                                    
-                        row.append((maximum-minimum)*val + minimum)                
-                _m.append(row)
-            normalizedMatrices.append(_m)
-        normalizedStatFeatureMatrix[t] = normalizedMatrices
-        
-    return normalizedStatFeatureMatrix
+    r = float(maximum-minimum)
+    mins = statisticalFeatureMatrix.min((0, 1))
+    maxs = statisticalFeatureMatrix.max((0, 1))
+    statisticalFeatureMatrix = np.nan_to_num(minimum + ((statisticalFeatureMatrix-mins)/(maxs-mins))*r)
+    return statisticalFeatureMatrix
     
 if __name__ == '__main__':
     generateStatisticalFeatureMatrix()    

@@ -15,19 +15,22 @@ def plot_sample(sample, name):
     plt.imshow(sample.T, cmap='hot', interpolation='nearest')
     plt.savefig('{}.png'.format(name))
 
-with open(os.path.join('save-vrnn', 'config.pkl')) as f:
+with open(os.path.join('save-vrnn-1', 'config.pkl')) as f:
     saved_args = cPickle.load(f)
 
 model = VRNN(saved_args, True)
 sess = tf.InteractiveSession()
 saver = tf.train.Saver(tf.all_variables())
 
-ckpt = tf.train.get_checkpoint_state('save-vrnn')
-print "loading model: ",ckpt.model_checkpoint_path
+#ckpt = tf.train.get_checkpoint_state('save-vrnn')
+#print "loading model: ",ckpt.model_checkpoint_path
 
-saver.restore(sess, ckpt.model_checkpoint_path)
+#saver.restore(sess, ckpt.model_checkpoint_path)
+saver.restore(sess, 'save-vrnn-1/model.ckpt-30')
 sample_data,mus,sigmas = model.sample(sess,saved_args)
-import ipdb; ipdb.set_trace()
+print(mus)
+print(sigmas)
+sample_data[sample_data<0] = 0
 plot_sample(sample_data, 'sample')
 print(sample_data)
 
