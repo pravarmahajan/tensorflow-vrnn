@@ -179,14 +179,6 @@ def generateStatisticalFeatureMatrix(Ls=256, Lf=4):
     cPickle.dump(keys, open("data/smallSample_{}_{}_keys.pkl".format(shape[0], shape[1]), "wb"))
     del keys
     np.save('data/smallSample_{}_{}.npy'.format(shape[0], shape[1]), np.vstack(statisticalFeatureMatrix.values()), allow_pickle=False)
-    #store = pd.HDFStore('data/smallSample_50_200.h5')
-    #store['data'] = convert_to_dataframe(statisticalFeatureMatrix)
-    #store.close()
-    #print("Data Saved")
-
-#def convert_to_dataframe(data):
-#    df_len = sum([v.shape[0] for statisticalFeatureMatrix.values()])
-#    pd.DataFrame(df_
 
 def returnSegmentIndexes(Ls, leng):
     ranges = []
