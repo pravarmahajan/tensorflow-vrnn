@@ -216,7 +216,7 @@ class VRNN():
             [o_mu, o_sigma, next_state_c, next_state_h] = sess.run([self.mu, self.sigma,
                 self.final_state_c, self.final_state_h],feed)
 
-            next_x = np.clip(sample_gaussian(o_mu, o_sigma), 0, 1)
+            #next_x = np.clip(sample_gaussian(o_mu, o_sigma), 0, 1)
             chunks[i] = next_x
             mus[i] = o_mu
             sigmas[i] = o_sigma

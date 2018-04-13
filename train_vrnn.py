@@ -9,6 +9,8 @@ import os
 import cPickle
 
 from model_vrnn import VRNN
+from model_config import config
+
 import matplotlib as mpl
 mpl.use("Agg")
 from matplotlib import pyplot as plt
@@ -102,7 +104,7 @@ if __name__ == '__main__':
                         help='learning rate')
     parser.add_argument('--decay_rate', type=float, default=1.,
                         help='decay of learning rate')
-    parser.add_argument('--traj_data', type=str, default='data/smallSample_5_5',
+    parser.add_argument('--traj_data', type=str, default='data/smallSample_50_200',
                         help='path to trajectory data')
     parser.add_argument('--val_frac', type=float, default='0.2',
                         help='fraction to use for validation')

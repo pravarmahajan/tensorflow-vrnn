@@ -1,14 +1,16 @@
-import tensorflow as tf
-
 import os
 import cPickle
-from model_vrnn import VRNN
+
+import tensorflow as tf
 import numpy as np
 import matplotlib as mpl
 mpl.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn
+
 from train_vrnn import load_data
+from model_vrnn import VRNN
+from model_config import config
 
 dirname = config['model_path']
 
