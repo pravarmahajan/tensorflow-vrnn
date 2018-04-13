@@ -7,28 +7,31 @@ import numpy as np
 import matplotlib as mpl
 mpl.use("Agg")
 import matplotlib.pyplot as plt
+import seaborn
+from train_vrnn import load_data
 
-from train_vrnn import next_batch
-#num = 100
-with open(os.path.join('save-vrnn', 'config.pkl')) as f:
+def plot_sample(sample, name):
+    plt.clf()
+    plt.imshow(sample.T, cmap='hot', interpolation='nearest')
+    plt.savefig('{}.png'.format(name))
+
+with open(os.path.join('save-vrnn-1', 'config.pkl')) as f:
     saved_args = cPickle.load(f)
-num = saved_args.seq_length
 
 model = VRNN(saved_args, True)
 sess = tf.InteractiveSession()
 saver = tf.train.Saver(tf.all_variables())
 
-ckpt = tf.train.get_checkpoint_state('save-vrnn')
-print "loading model: ",ckpt.model_checkpoint_path
+saver.restore(sess, 'save-vrnn-1/model.ckpt-30')
+sample_data,mus,sigmas = model.sample(sess,saved_args)
+print(mus)
+print(sigmas)
+sample_data[sample_data<0] = 0
+plot_sample(sample_data, 'sample')
+print(sample_data)
 
-saver.restore(sess, ckpt.model_checkpoint_path)
-prev_x,sample_data,mus,sigmas= model.sample(sess,saved_args)
-
-#plt.scatter(range(num), sample_data[:, 0], c='b', s=1)
-#plt.scatter(range(num), sample_data[:, 1], c='g', s=1)
-fig, axes = plt.subplots(figsize = (50, 10))
-axes.plot(range(num), sample_data[:, 0], c='b')
-axes.plot(range(num), prev_x[:, :, 0].squeeze(), c='g')
-import ipdb; ipdb.set_trace()
-#plt.plot(range(num), sample_data[:, 1], c='g')
-plt.savefig('test.png')
+train, val = load_data(saved_args)
+for i in range(5):
+    random_data = train[np.random.randint(0, train.shape[0])]
+    plot_sample(random_data, 'random_{}'.format(i))
+    print(random_data)
