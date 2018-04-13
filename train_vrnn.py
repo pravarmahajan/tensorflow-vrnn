@@ -29,7 +29,7 @@ def pad_w_zeros(trip_seg, seq_length, num_features):
         return trip_seg[:seq_length+1]
 
 def load_data(args):
-    trip_segments = np.load('{}.npy'.format(args.traj_data))/40.0
+    trip_segments = np.load('{}.npy'.format(args.traj_data))
     print("Number of samples: {}".format(trip_segments.shape[0]))
     np.random.shuffle(trip_segments)
     split_idx = int((1-args.val_frac) * trip_segments.shape[0])
@@ -48,7 +48,6 @@ def train(args, model):
     with open(os.path.join(dirname, 'config.pkl'), 'w') as f:
         cPickle.dump(args, f)
 
-    #ckpt = tf.train.get_checkpoint_state(dirname)
     ckpt = False
     train_data, val_data = load_data(args)
     with tf.Session() as sess:
@@ -62,11 +61,9 @@ def train(args, model):
             print "Loaded model"
         for e in xrange(args.num_epochs):
             sess.run(tf.assign(model.lr, args.learning_rate * (args.decay_rate ** e)))
-            #state = model.initial_state_c, model.initial_state_h
             train_batches = batch_generator(train_data, args)
             train_loss = 0.0
             for (b, x) in enumerate(train_batches):
-                #x, y = next_batch(args)
                 feed = {model.input_data: x[:, :args.seq_length, :], model.target_data: x[:, 1:, :]}
                 loss, _, cr, summary, sigma, mu, input, target= sess.run(
                         [model.cost, model.train_op, check, merged, model.sigma, model.mu, model.flat_input, model.target],

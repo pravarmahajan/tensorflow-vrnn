@@ -75,25 +75,25 @@ def generateStatisticalFeatureMatrix(Ls=256, Lf=4):
     filename = 'smallSample_{}_{}.csv'.format(shape[0], shape[1])
     with open('Samples/'+filename, 'r') as f:
         lines = f.readlines()
-        ct = ""
+        ct = ''
+        cd = ''
         tj = []
-        bar = progressbar.ProgressBar()
+        bar = progressbar.ProgressBar()        
         for ln in bar(lines):
             pts = ln.replace('\r\n','').split(',')
             if pts[1] != ct:
                 if ct == "" and pts[0]=="Driver":
                     continue
                 if len(tj) >0:
-                    trajectories[pts[0]+"|"+ct] = tj
+                    trajectories[cd+"|"+ct] = tj
                 tj = []
                 tj.append(point(int(pts[2]), float(pts[3]), float(pts[4])))                
                 ct = pts[1]
+                cd = pts[0]
             else:
                 tj.append(point(int(pts[2]), float(pts[3]), float(pts[4]))) 
-        trajectories[pts[0]+"|"+ct] = tj
-#     cPickle.dump(trajectories, open('trajectories', 'w'))
+        trajectories[cd+"|"+ct] = tj
     print('Raw Trajectory Data is loaded! |Trajectories|:' + str(len(trajectories)))
-    #Generate Basic Features for each trajectory
     basicFeatures = {}
     bar = progressbar.ProgressBar()
     for t in bar(trajectories):

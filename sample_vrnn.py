@@ -22,10 +22,6 @@ model = VRNN(saved_args, True)
 sess = tf.InteractiveSession()
 saver = tf.train.Saver(tf.all_variables())
 
-#ckpt = tf.train.get_checkpoint_state('save-vrnn')
-#print "loading model: ",ckpt.model_checkpoint_path
-
-#saver.restore(sess, ckpt.model_checkpoint_path)
 saver.restore(sess, 'save-vrnn-1/model.ckpt-30')
 sample_data,mus,sigmas = model.sample(sess,saved_args)
 print(mus)
