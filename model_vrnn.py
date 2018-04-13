@@ -42,7 +42,6 @@ class VartiationalRNNCell(tf.contrib.rnn.RNNCell):
     def __call__(self, x, state, scope=None):
         with tf.variable_scope(scope or type(self).__name__):
             h, c = state
-
             with tf.variable_scope("Prior"):
                 with tf.variable_scope("hidden"):
                     prior_hidden = tf.nn.relu(linear(h, self.n_prior_hidden))
@@ -131,8 +130,7 @@ class VRNN():
 
         self.input_data = tf.placeholder(dtype=tf.float32, shape=[None, args.seq_length, args.num_features], name='input_data')
         self.target_data = tf.placeholder(dtype=tf.float32, shape=[None, args.seq_length, args.num_features],name = 'target_data')
-        self.initial_state_c, self.initial_state_h = cell.zero_state(batch_size=args.batch_size, dtype=tf.float32)
-
+        self.initial_state_c, self.initial_state_h = cell.zero_state(batch_size=tf.shape(self.input_data)[0], dtype=tf.float32)
 
         # input shape: (batch_size, n_steps, n_input)
         with tf.variable_scope("inputs"):
@@ -147,8 +145,8 @@ class VRNN():
         self.flat_input = tf.reshape(tf.transpose(tf.stack(inputs),[1,0,2]),[-1, args.num_features])
         self.input = tf.stack(inputs)
         # Get vrnn cell output
-        #outputs, last_state = tf.contrib.rnn.static_rnn(cell, inputs, initial_state=(self.initial_state_c,self.initial_state_h))
-        outputs, last_state = tf.contrib.rnn.static_rnn(cell, inputs, dtype=tf.float32) 
+        outputs, last_state = tf.contrib.rnn.static_rnn(cell, inputs, initial_state=(self.initial_state_c,self.initial_state_h))
+        #outputs, last_state = tf.contrib.rnn.static_rnn(cell, inputs, dtype=tf.float32) 
         #print outputs
         #outputs = map(tf.pack,zip(*outputs))
         outputs_reshape = []
@@ -180,13 +178,8 @@ class VRNN():
         for t in tvars:
             print t.name
         grads = tf.gradients(self.cost, tvars)
-        #grads = tf.cond(
-        #    tf.global_norm(grads) > 1e-20,
-        #    lambda: tf.clip_by_global_norm(grads, args.grad_clip)[0],
-        #    lambda: grads)
         optimizer = tf.train.AdamOptimizer(self.lr)
         self.train_op = optimizer.apply_gradients(zip(grads, tvars))
-        #self.saver = tf.train.Saver(tf.all_variables())
 
     def sample(self, sess, args,num=128,start=None):
 

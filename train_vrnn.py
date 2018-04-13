@@ -21,15 +21,9 @@ TODOS:
     - clean up nomenclature to remove MDCT references
     - implement separate MDCT training and sampling version
 '''
-def pad_w_zeros(trip_seg, seq_length, num_features):
-    l = len(trip_seg)
-    if l <= seq_length:
-        return  [[0]*num_features]*(seq_length+1-l) + trip_seg
-    else:
-        return trip_seg[:seq_length+1]
 
 def load_data(args):
-    trip_segments = np.load('{}.npy'.format(args.traj_data))
+    trip_segments = np.load('{}.npy'.format(args.traj_data))/config['scale']
     print("Number of samples: {}".format(trip_segments.shape[0]))
     np.random.shuffle(trip_segments)
     split_idx = int((1-args.val_frac) * trip_segments.shape[0])
@@ -41,7 +35,7 @@ def batch_generator(data, args):
         yield data[i:i+args.batch_size, :, :]
 
 def train(args, model):
-    dirname = 'save-vrnn-1'
+    dirname = config['model_path']
     if not os.path.exists(dirname):
         os.makedirs(dirname)
 
@@ -100,7 +94,7 @@ if __name__ == '__main__':
                         help='Number of features')
     parser.add_argument('--num_epochs', type=int, default=100,
                         help='number of epochs')
-    parser.add_argument('--save_every', type=int, default=500,
+    parser.add_argument('--save_every', type=int, default=10,
                         help='save frequency')
     parser.add_argument('--grad_clip', type=float, default=10.,
                         help='clip gradients at this value')
@@ -108,7 +102,7 @@ if __name__ == '__main__':
                         help='learning rate')
     parser.add_argument('--decay_rate', type=float, default=1.,
                         help='decay of learning rate')
-    parser.add_argument('--traj_data', type=str, default='data/smallSample_50_200',
+    parser.add_argument('--traj_data', type=str, default='data/smallSample_5_5',
                         help='path to trajectory data')
     parser.add_argument('--val_frac', type=float, default='0.2',
                         help='fraction to use for validation')
